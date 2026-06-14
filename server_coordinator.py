@@ -157,27 +157,32 @@ class CoordinatorHandler(BaseHTTPRequestHandler):
 
         # 2. Endpoint: /report_match
         elif self.path == "/report_match":
-            server_state["stop_flag"] = True
+            has_active_balance = payload.get("has_active_balance", True)
+            found_key = int(payload.get("private_key_number"))
             
-            # Registra la vincita
+            # Registra la vincita/storico nel file centrale risultati.json
             save_positive_match({
-                "private_key_number": str(payload.get("private_key_number")),
+                "private_key_number": str(found_key),
                 "wif": payload.get("wif"),
                 "addresses": payload.get("addresses"),
                 "results": payload.get("results"),
+                "has_active_balance": has_active_balance,
                 "found_by_worker": payload.get("worker_id", "unknown"),
                 "found_at": datetime.datetime.now().isoformat()
             })
             
-            # Aggiorna il checkpoint esatto sulla chiave trovata
-            found_key = int(payload.get("private_key_number"))
-            server_state["next_private_key_number"] = found_key + 1
-            save_checkpoint_on_disk()
-            
-            logging.info("======================================================================")
-            logging.info(f"!!! RILEVATO SALDO ATTIVO DA WORKER {payload.get('worker_id')} !!!")
-            logging.info(f"Chiave trovata: #{found_key}")
-            logging.info("======================================================================")
+            if has_active_balance:
+                server_state["stop_flag"] = True
+                # Aggiorna il checkpoint esatto sulla chiave trovata
+                server_state["next_private_key_number"] = found_key + 1
+                save_checkpoint_on_disk()
+                
+                logging.info("======================================================================")
+                logging.info(f"!!! RILEVATO SALDO ATTIVO DA WORKER {payload.get('worker_id')} !!!")
+                logging.info(f"Chiave trovata: #{found_key}")
+                logging.info("======================================================================")
+            else:
+                logging.info(f"Ricevuta chiave #{found_key} con storico transazioni (saldo zero) da worker {payload.get('worker_id')} - Registrata in risultati.json")
             
             self.send_json(200, {"status": "acknowledged"})
             return

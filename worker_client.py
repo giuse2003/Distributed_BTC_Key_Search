@@ -278,11 +278,19 @@ def main():
                 
                 for addr_index, addr_type in enumerate(["legacy", "nested", "native"]):
                     sh = derived["scripthashes"][addr_type]
+                    # Richiesta Saldo
                     batch_requests.append({
                         "jsonrpc": "2.0",
                         "method": "blockchain.scripthash.get_balance",
                         "params": [sh],
-                        "id": i * 3 + addr_index
+                        "id": i * 6 + addr_index * 2
+                    })
+                    # Richiesta Storico
+                    batch_requests.append({
+                        "jsonrpc": "2.0",
+                        "method": "blockchain.scripthash.get_history",
+                        "params": [sh],
+                        "id": i * 6 + addr_index * 2 + 1
                     })
             
             # Interroga Fulcrum locale/remoto via TCP
@@ -306,28 +314,70 @@ def main():
             
             # Analizza i saldi del batch
             for idx, (current_key, derived) in enumerate(batch_keys):
-                legacy_bal = batch_responses[idx * 3]["result"]
-                nested_bal = batch_responses[idx * 3 + 1]["result"]
-                native_bal = batch_responses[idx * 3 + 2]["result"]
+                legacy_bal = batch_responses[idx * 6]["result"]
+                legacy_hist = batch_responses[idx * 6 + 1]["result"]
+                nested_bal = batch_responses[idx * 6 + 2]["result"]
+                nested_hist = batch_responses[idx * 6 + 3]["result"]
+                native_bal = batch_responses[idx * 6 + 4]["result"]
+                native_hist = batch_responses[idx * 6 + 5]["result"]
                 
+                # Calcola saldi attivi
                 total_sats = (legacy_bal.get("confirmed", 0) + legacy_bal.get("unconfirmed", 0) +
                               nested_bal.get("confirmed", 0) + nested_bal.get("unconfirmed", 0) +
                               native_bal.get("confirmed", 0) + native_bal.get("unconfirmed", 0))
                 
-                if total_sats > 0:
-                    found_funds = True
-                    fund_key_info = {
-                        "number": current_key,
-                        "wif": derived["wif"],
-                        "addresses": derived["addresses"],
-                        "scripthashes": derived["scripthashes"],
-                        "balances": {
-                            "legacy": legacy_bal,
-                            "nested": nested_bal,
-                            "native": native_bal
+                # Conta storico transazioni
+                legacy_hist_count = len(legacy_hist) if isinstance(legacy_hist, list) else 0
+                nested_hist_count = len(nested_hist) if isinstance(nested_hist, list) else 0
+                native_hist_count = len(native_hist) if isinstance(native_hist, list) else 0
+                total_hist_count = legacy_hist_count + nested_hist_count + native_hist_count
+                
+                has_active_balance = total_sats > 0
+                has_past_history = total_hist_count > 0
+                
+                if has_active_balance or has_past_history:
+                    results_data = {
+                        "legacy": {
+                            "confirmed": legacy_bal.get("confirmed", 0),
+                            "unconfirmed": legacy_bal.get("unconfirmed", 0),
+                            "history_count": legacy_hist_count
+                        },
+                        "nested": {
+                            "confirmed": nested_bal.get("confirmed", 0),
+                            "unconfirmed": nested_bal.get("unconfirmed", 0),
+                            "history_count": nested_hist_count
+                        },
+                        "native": {
+                            "confirmed": native_bal.get("confirmed", 0),
+                            "unconfirmed": native_bal.get("unconfirmed", 0),
+                            "history_count": native_hist_count
                         }
                     }
-                    break
+                    
+                    report_payload = {
+                        "worker_id": worker_id,
+                        "private_key_number": str(current_key),
+                        "wif": derived["wif"],
+                        "addresses": derived["addresses"],
+                        "results": results_data,
+                        "has_active_balance": has_active_balance
+                    }
+                    
+                    if has_active_balance:
+                        # Trovato SALDO ATTIVO -> Ferma lo script client ed avvisa il Server
+                        found_funds = True
+                        fund_key_info = {
+                            "number": current_key,
+                            "wif": derived["wif"],
+                            "addresses": derived["addresses"],
+                            "payload": report_payload,
+                            "total_sats": total_sats
+                        }
+                        break
+                    else:
+                        # Trovato SOLO STORICO PASSATO (saldo zero) -> Invia al Server ma NON fermare
+                        logging.info(f"Trovata chiave #{current_key} con solo storico passato (saldo zero). Invio notifica non bloccante al server...")
+                        http_request(f"{coordinator_url}/report_match", report_payload)
             
             if found_funds:
                 break
@@ -340,36 +390,15 @@ def main():
                 speed = offset / elapsed if elapsed > 0 else 0
                 logging.info(f"Progresso blocco: {offset}/{count} | Velocità: {speed:.1f} chiavi/sec")
                 
-        # 3. Se troviamo una chiave con saldo positivo
+        # 3. Se troviamo una chiave con saldo positivo ATTUALE (bloccante)
         if found_funds:
-            logging.info(f"!!! TROVATO SALDO ATTIVO SULLA CHIAVE #{fund_key_info['number']} !!!")
-            # Raccoglie la cronologia di transazioni
-            history_counts = client.query_history(fund_key_info["scripthashes"])
-            
-            # Costruisce il report da inviare al server
-            results_data = {}
-            for addr_type in ["legacy", "nested", "native"]:
-                bal = fund_key_info["balances"][addr_type]
-                results_data[addr_type] = {
-                    "confirmed": bal.get("confirmed", 0),
-                    "unconfirmed": bal.get("unconfirmed", 0),
-                    "history_count": history_counts[addr_type]
-                }
-            
-            report_payload = {
-                "worker_id": worker_id,
-                "private_key_number": str(fund_key_info["number"]),
-                "wif": fund_key_info["wif"],
-                "addresses": fund_key_info["addresses"],
-                "results": results_data
-            }
-            
-            logging.info("Invio notifica di ritrovamento al server coordinator...")
-            resp = http_request(f"{coordinator_url}/report_match", report_payload)
-            client.close()
-            
             logging.info("======================================================================")
-            logging.info(f"SALDO TROVATO SULLA CHIAVE #{fund_key_info['number']}. NOTIFICA INVIATA.")
+            logging.info(f"!!! RILEVATO SALDO ATTIVO SULLA CHIAVE #{fund_key_info['number']} !!!")
+            logging.info(f"Saldo: {fund_key_info['total_sats']} sat")
+            logging.info("Invio notifica bloccante di ritrovamento al server coordinator...")
+            resp = http_request(f"{coordinator_url}/report_match", fund_key_info["payload"])
+            client.close()
+            logging.info("======================================================================")
             logging.info("Lo script Worker si è ARRESTATO correttamente.")
             logging.info("======================================================================")
             break
