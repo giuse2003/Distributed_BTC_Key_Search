@@ -314,12 +314,20 @@ def main():
             
             # Analizza i saldi del batch
             for idx, (current_key, derived) in enumerate(batch_keys):
-                legacy_bal = batch_responses[idx * 6]["result"]
-                legacy_hist = batch_responses[idx * 6 + 1]["result"]
-                nested_bal = batch_responses[idx * 6 + 2]["result"]
-                nested_hist = batch_responses[idx * 6 + 3]["result"]
-                native_bal = batch_responses[idx * 6 + 4]["result"]
-                native_hist = batch_responses[idx * 6 + 5]["result"]
+                def get_result(resp, default):
+                    if isinstance(resp, dict):
+                        if "error" in resp:
+                            logging.error(f"Errore Fulcrum nel batch: {resp['error']}")
+                            return default
+                        return resp.get("result") or default
+                    return default
+
+                legacy_bal = get_result(batch_responses[idx * 6], {})
+                legacy_hist = get_result(batch_responses[idx * 6 + 1], [])
+                nested_bal = get_result(batch_responses[idx * 6 + 2], {})
+                nested_hist = get_result(batch_responses[idx * 6 + 3], [])
+                native_bal = get_result(batch_responses[idx * 6 + 4], {})
+                native_hist = get_result(batch_responses[idx * 6 + 5], [])
                 
                 # Calcola saldi attivi
                 total_sats = (legacy_bal.get("confirmed", 0) + legacy_bal.get("unconfirmed", 0) +
