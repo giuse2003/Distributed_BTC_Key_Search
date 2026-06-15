@@ -378,7 +378,7 @@ def main():
     global BATCH_SIZE, keep_running
     parser = argparse.ArgumentParser(description="Worker Client per scansione chiavi Bitcoin distribuita.")
     parser.add_argument("--server", default="127.0.0.1", help="Indirizzo IP del Server Coordinator.")
-    parser.add_argument("--port", type=int, default=8000, help="Porta HTTP del Server Coordinator.")
+    parser.add_argument("--port", type=int, default=8085, help="Porta HTTP del Server Coordinator.")
     parser.add_argument("--fulcrum-host", help="Indirizzo IP di Fulcrum. Se omesso, usa lo stesso del server coordinator.")
     parser.add_argument("--fulcrum-port", type=int, default=50001, help="Porta TCP di Fulcrum.")
     parser.add_argument("--worker-id", help="ID unico del Worker. Se omesso, usa il nome del computer.")

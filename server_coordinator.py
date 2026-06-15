@@ -19,7 +19,7 @@ logging.basicConfig(
 
 CHECKPOINT_FILE = "checkpoint.json"
 RESULTS_FILE = "risultati.json"
-PORT = 8000
+PORT = 8085
 BLOCK_SIZE = 100000  # Dimensione di default del blocco di chiavi da scansionare
 
 # Stato Globale in memoria

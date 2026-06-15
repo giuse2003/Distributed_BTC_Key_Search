@@ -2,6 +2,6 @@
 chcp 65001 > nul
 title Worker Client (Locale) - Distributed BTC Search
 echo Avvio del Worker Client connesso a localhost...
-py worker_client.py --server 127.0.0.1 --port 8000
+py worker_client.py --server 127.0.0.1 --port 8085
 echo.
 pause
