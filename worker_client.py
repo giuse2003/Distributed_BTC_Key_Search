@@ -29,7 +29,7 @@ logging.basicConfig(
 )
 
 BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
-BATCH_SIZE = 20  # Numero di chiavi da verificare in una singola richiesta batch a Fulcrum
+BATCH_SIZE = 100  # Numero di chiavi da verificare in una singola richiesta batch a Fulcrum
 keep_running = True
 
 def handle_sigint(signum, frame):
