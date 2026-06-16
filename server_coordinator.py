@@ -5,6 +5,7 @@ import time
 import datetime
 import logging
 import signal
+from decimal import Decimal, getcontext
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Setup Logging
@@ -21,6 +22,16 @@ CHECKPOINT_FILE = "checkpoint.json"
 RESULTS_FILE = "risultati.json"
 PORT = 8085
 BLOCK_SIZE = 100000  # Dimensione di default del blocco di chiavi da scansionare
+
+# Ordine della curva secp256k1 (N) meno 1 (chiave 0 non valida)
+TOTAL_KEYS = Decimal("115792089237316195423570985008687907852837564279074904382605163141518161494337")
+
+def get_completion_percentage(checked_keys):
+    getcontext().prec = 80
+    pct = (Decimal(checked_keys) / TOTAL_KEYS) * 100
+    if pct == 0:
+        return "0.0%"
+    return f"{pct:.6e}%"
 
 # Stato Globale in memoria
 server_state = {
@@ -125,10 +136,14 @@ class CoordinatorHandler(BaseHTTPRequestHandler):
 
         # 2. Endpoint: /status
         elif self.path == "/status" or self.path == "/":
+            pct_checked = get_completion_percentage(server_state["checked_keys"])
+            pct_scanned = get_completion_percentage(server_state["next_private_key_number"] - 1)
             self.send_json(200, {
                 "status": "scanning" if not server_state["stop_flag"] else "stopped",
                 "next_private_key_number": str(server_state["next_private_key_number"]),
-                "checked_keys": str(server_state["checked_keys"])
+                "checked_keys": str(server_state["checked_keys"]),
+                "completion_percentage_checked": pct_checked,
+                "completion_percentage_scanned": pct_scanned
             })
             return
 
@@ -151,7 +166,9 @@ class CoordinatorHandler(BaseHTTPRequestHandler):
             count = int(payload.get("count", 0))
             server_state["checked_keys"] += count
             save_checkpoint_on_disk()
-            logging.info(f"Worker {payload.get('worker_id', 'unknown')} ha completato un blocco di {count} chiavi. Totale verificate: {server_state['checked_keys']}")
+            pct_checked = get_completion_percentage(server_state["checked_keys"])
+            pct_scanned = get_completion_percentage(server_state["next_private_key_number"] - 1)
+            logging.info(f"Worker {payload.get('worker_id', 'unknown')} ha completato un blocco di {count} chiavi. Totale verificate: {server_state['checked_keys']} ({pct_checked}) | Range scansionato: {server_state['next_private_key_number'] - 1} ({pct_scanned})")
             self.send_json(200, {"status": "acknowledged"})
             return
 
@@ -197,7 +214,9 @@ def main():
     server_state["next_private_key_number"] = int(checkpoint["next_private_key_number"])
     server_state["checked_keys"] = int(checkpoint["checked_keys"])
     
-    logging.info(f"Partenza impostata a chiave #{server_state['next_private_key_number']} (verificate in passato: {server_state['checked_keys']})")
+    pct_checked = get_completion_percentage(server_state["checked_keys"])
+    pct_scanned = get_completion_percentage(server_state["next_private_key_number"] - 1)
+    logging.info(f"Partenza impostata a chiave #{server_state['next_private_key_number']} (verificate in passato: {server_state['checked_keys']} - {pct_checked}) - Spazio scansionato: {pct_scanned}")
     
     server = HTTPServer(("0.0.0.0", PORT), CoordinatorHandler)
     logging.info(f"Server Coordinator avviato e in ascolto su HTTP port {PORT}...")

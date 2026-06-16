@@ -13,7 +13,7 @@ if "%BATCH_SIZE%"=="" set BATCH_SIZE=100
 
 echo.
 echo Avvio del Worker Client connesso a desktop-casa-giuse sulla porta 8085...
-echo Thread: %THREADS% | Batch Size: %BATCH_SIZE%
+echo Thread: %THREADS% ^| Batch Size: %BATCH_SIZE%
 echo =======================================
 echo.
 
