@@ -120,17 +120,31 @@ class CoordinatorHandler(BaseHTTPRequestHandler):
                 self.send_json(200, {"status": "stop", "message": "Ricerca interrotta: trovata chiave con saldo."})
                 return
             
+            # Legge parametri della querystring
+            from urllib.parse import urlparse, parse_qs
+            parsed_path = urlparse(self.path)
+            query = parse_qs(parsed_path.query)
+            
+            requested_count = BLOCK_SIZE
+            if "count" in query:
+                try:
+                    requested_count = int(query["count"][0])
+                    if requested_count < 1: requested_count = BLOCK_SIZE
+                    if requested_count > 100000000000: requested_count = 100000000000
+                except ValueError:
+                    pass
+
             # Assegna il blocco di lavoro
             start_key = server_state["next_private_key_number"]
-            server_state["next_private_key_number"] += BLOCK_SIZE
+            server_state["next_private_key_number"] += requested_count
             save_checkpoint_on_disk()
             
-            logging.info(f"Assegnato blocco da #{start_key} a #{start_key + BLOCK_SIZE - 1}")
+            logging.info(f"Assegnato blocco da #{start_key} a #{start_key + requested_count - 1} ({requested_count} chiavi)")
             
             self.send_json(200, {
                 "status": "ok",
                 "start": str(start_key),
-                "count": str(BLOCK_SIZE)
+                "count": str(requested_count)
             })
             return
 

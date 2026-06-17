@@ -20,7 +20,7 @@ Questo progetto consente a molteplici PC (Workers) di unire le proprie forze di 
 ```
 
 1. **Server Coordinator (`server_coordinator.py`)**:
-   Gestisce in modo centralizzato il checkpoint e la progressione complessiva. Distribuisce blocchi di lavoro (es. 100.000 chiavi) ai worker ed aspetta i loro report. Se riceve la segnalazione di un saldo positivo, arresta immediatamente tutti i worker.
+   Gestisce in modo centralizzato il checkpoint e la progressione complessiva. Distribuisce blocchi di lavoro (es. 100.000 chiavi di default) ai worker ed aspetta i loro report. Supporta anche richieste di blocchi dinamiche (parametro `count`) per gestire worker GPU ad altissime prestazioni (es. blocchi da 50 milioni) senza sovraccaricare la rete. Se riceve la segnalazione di un saldo positivo, arresta immediatamente tutti i worker.
 2. **Worker Client (`worker_client.py`)**:
    Richiede un blocco al server, calcola gli indirizzi localmente sfruttando al 100% la propria CPU, ed interroga direttamente Fulcrum sul server in formato batch TCP. Se trova un saldo attivo, si arresta subito e invia la notifica al Server Coordinator.
 
